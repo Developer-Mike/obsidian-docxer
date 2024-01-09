@@ -1,0 +1,10 @@
+#docxer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 10px 20px;
+
+  font-size: 1rem;
+  background-color: var(--background-secondary);
+}
