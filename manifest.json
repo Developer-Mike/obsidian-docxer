@@ -1,0 +1,10 @@
+{
+	"id": "docxer",
+	"name": "Docxer",
+	"version": "0.0.1",
+	"minAppVersion": "0.15.0",
+	"description": "Import Word files into obsidian. Converts .docx files to .md files.",
+	"author": "Developer-Mike",
+	"authorUrl": "https://github.com/Developer-Mike",
+	"isDesktopOnly": false
+}
