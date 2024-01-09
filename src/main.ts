@@ -1,27 +1,20 @@
-import { Plugin, Notice, debounce } from 'obsidian';
+import { Plugin } from 'obsidian';
 import { DocxerPluginSettings, DocxerSettingTab, DEFAULT_SETTINGS } from './settings';
 import { registerCommands } from './commands';
-import * as fs from 'fs';
+import { registerFilePreviews } from './file-preview';
 
 export default class DocxerPlugin extends Plugin {
-  static INSTANCE: DocxerPlugin;
   settings: DocxerPluginSettings;
 
 	async onload() {
-    DocxerPlugin.INSTANCE = this;
-
-    await this.loadSettings();
-    this.addSettingTab(new DocxerSettingTab(this.app, this));
-
+    this.initSettings();
     registerCommands(this);
-
-    this.registerEvent(this.app.vault.on("create", this.onFileCreated));
+    registerFilePreviews(this);
 	}
 
-  onFileCreated(e: any) {
-    if (e.extension !== "docx") return;
-
-    console.log(e);
+  async initSettings() {
+    await this.loadSettings();
+    this.addSettingTab(new DocxerSettingTab(this.app, this));
   }
 
   async loadSettings() {
