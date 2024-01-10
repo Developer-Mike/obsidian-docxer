@@ -1,6 +1,5 @@
 import { Plugin } from 'obsidian';
 import { DocxerPluginSettings, DocxerSettingTab, DEFAULT_SETTINGS } from './settings';
-import { registerCommands } from './commands';
 import { registerFilePreviews } from './file-preview';
 
 export default class DocxerPlugin extends Plugin {
@@ -8,7 +7,6 @@ export default class DocxerPlugin extends Plugin {
 
 	async onload() {
     this.initSettings();
-    registerCommands(this);
     registerFilePreviews(this);
 	}
 
