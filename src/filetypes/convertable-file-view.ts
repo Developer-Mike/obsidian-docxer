@@ -1,13 +1,16 @@
 import { Notice, TFile, TextFileView, WorkspaceLeaf } from "obsidian";
 import * as path from "path";
+import DocxerPlugin from "src/main";
 
 export default abstract class ConvertableFileView extends TextFileView {
+  plugin: DocxerPlugin;
   fileContent: string;
   header: HTMLElement|null = null;
   content: HTMLElement|null = null;
 
-	constructor(leaf: WorkspaceLeaf) {
+	constructor(leaf: WorkspaceLeaf, plugin: DocxerPlugin) {
 		super(leaf);
+    this.plugin = plugin;
 	}
 
 	getDisplayText(): string {
@@ -70,7 +73,12 @@ export default abstract class ConvertableFileView extends TextFileView {
     if (!this.file) return;
 
     const targetFilepath = path.join(path.dirname(this.file.path), path.basename(this.file.path, path.extname(this.file.path)) + ".md");
-    const attachmentsDirectory = path.dirname(targetFilepath);
+    const attachmentsDirectory = {
+      "vault": "",
+      "custom": this.plugin.settings.customAttachmentsFolder,
+      "same": path.dirname(targetFilepath),
+      "subfolder": path.join(path.dirname(targetFilepath), this.plugin.settings.customAttachmentsFolder)
+    }[this.plugin.settings.attachmentsFolder];
 
     const markdown = await this.toMarkdown(attachmentsDirectory);
     if (!markdown) {
@@ -78,6 +86,10 @@ export default abstract class ConvertableFileView extends TextFileView {
       return;
     }
 
-    this.app.vault.create(targetFilepath, markdown);
+    const convertedFile = await this.app.vault.create(targetFilepath, markdown);
+    this.leaf.openFile(convertedFile);
+
+    if (this.plugin.settings.deleteFileAfterConversion)
+      this.app.vault.delete(this.file);
   }
 }

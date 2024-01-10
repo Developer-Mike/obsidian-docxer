@@ -3,7 +3,7 @@ import * as mammoth from "mammoth";
 import { NodeHtmlMarkdown } from 'node-html-markdown'
 import { renderAsync } from 'docx-preview'
 import * as path from "path";
-import { toValidFilename } from "src/utils";
+import { createMissingFolders, toObsidianPath, toValidFilename } from "src/utils";
 
 export default class DocxFileView extends ConvertableFileView {
   static readonly VIEW_TYPE = "docx-view";
@@ -30,8 +30,9 @@ export default class DocxFileView extends ConvertableFileView {
       convertImage: mammoth.images.imgElement((image: any) => {
         return image.read().then((imageBinary: any) => {
           const filename = toValidFilename(image.altText) + "." + image.contentType.split("/")[1];
-          const filepath = path.join(attachmentsDirectory, filename);
+          const filepath = toObsidianPath(path.join(attachmentsDirectory, filename));
 
+          createMissingFolders(this.app, filepath);
           this.app.vault.createBinary(filepath, imageBinary);
           return { alt: image.altText, src: filepath };
         });

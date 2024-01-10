@@ -9,7 +9,7 @@ export const FILETYPE_MAP: {[key: string]: typeof ConvertableFileView} = {
 export function registerFilePreviews(plugin: Plugin) {
   for (const [filetype, view] of Object.entries(FILETYPE_MAP)) {
     // @ts-ignore
-    plugin.registerView(view.VIEW_TYPE, (leaf) => new view(leaf, this));
+    plugin.registerView(view.VIEW_TYPE, (leaf) => new view(leaf, plugin));
 
     // @ts-ignore
     plugin.registerExtensions([filetype], view.VIEW_TYPE);

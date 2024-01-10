@@ -1,6 +1,6 @@
 import { Plugin } from 'obsidian';
 import { DocxerPluginSettings, DocxerSettingTab, DEFAULT_SETTINGS } from './settings';
-import { registerFilePreviews } from './file-preview';
+import { registerFilePreviews } from './file-previews';
 
 export default class DocxerPlugin extends Plugin {
   settings: DocxerPluginSettings;

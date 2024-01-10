@@ -10,5 +10,6 @@
 }
 
 .docx-wrapper {
+  padding: 0 !important;
   background-color: var(--background-primary) !important;
 }
