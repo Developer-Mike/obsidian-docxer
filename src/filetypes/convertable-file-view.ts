@@ -1,5 +1,3 @@
-import { on } from "events";
-import * as fs from "fs";
 import { Notice, TFile, TextFileView, WorkspaceLeaf } from "obsidian";
 import * as path from "path";
 
@@ -44,11 +42,11 @@ export default abstract class ConvertableFileView extends TextFileView {
     if (this.header) this.header.remove();
 	}
 
-  abstract onFileOpen(): HTMLElement|null;
+  abstract onFileOpen(): Promise<HTMLElement|null>;
 	async onLoadFile(file: TFile) {
 		await super.onLoadFile(file);
 
-    this.content = this.onFileOpen();
+    this.content = await this.onFileOpen();
     if (this.content) this.contentEl.appendChild(this.content);
 	}
 
@@ -67,24 +65,19 @@ export default abstract class ConvertableFileView extends TextFileView {
     return this.fileContent;
 	}
 
-  abstract toMarkdown(): Promise<string|null>;
+  abstract toMarkdown(attachmentsDirectory: string): Promise<string|null>;
   private async convertFile() {
     if (!this.file) return;
 
-    // @ts-ignore
-    const filepath = path.join(this.file?.vault?.adapter?.basePath, this.file?.path);
-    const targetFilepath = path.join(path.dirname(filepath), path.basename(filepath, path.extname(filepath)) + ".md");
-    const markdown = await this.toMarkdown();
+    const targetFilepath = path.join(path.dirname(this.file.path), path.basename(this.file.path, path.extname(this.file.path)) + ".md");
+    const attachmentsDirectory = path.dirname(targetFilepath);
+
+    const markdown = await this.toMarkdown(attachmentsDirectory);
     if (!markdown) {
       new Notice("Error converting file to markdown.");
       return;
     }
 
-    fs.writeFile(targetFilepath, markdown, (err) => {
-      if (err) {
-        new Notice("Error converting file to markdown.");
-        console.error(err);
-      } else new Notice("File converted successfully!");
-    });
+    this.app.vault.create(targetFilepath, markdown);
   }
 }
