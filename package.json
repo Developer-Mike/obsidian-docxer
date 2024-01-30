@@ -24,7 +24,6 @@
 	},
 	"dependencies": {
 		"docx-preview": "^0.3.0",
-		"mammoth": "^1.6.0",
-		"node-html-markdown": "^1.3.0"
+		"mammoth": "^1.6.0"
 	}
 }

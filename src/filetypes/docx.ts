@@ -1,9 +1,9 @@
 import ConvertableFileView from "./convertable-file-view";
 import * as mammoth from "mammoth";
-import { NodeHtmlMarkdown } from 'node-html-markdown'
-import { renderAsync } from 'docx-preview'
+import { renderAsync } from 'docx-preview';
 import * as path from "path";
 import { createMissingFolders, toObsidianPath, toValidFilename } from "src/utils";
+import { htmlToMarkdown } from "obsidian";
 
 export default class DocxFileView extends ConvertableFileView {
   static readonly VIEW_TYPE = "docx-view";
@@ -39,9 +39,7 @@ export default class DocxFileView extends ConvertableFileView {
       })
     })
 
-    const markdownService = new NodeHtmlMarkdown();
-    const markdown = markdownService.translate(html.value);
-
+    const markdown = htmlToMarkdown(html.value);
     return markdown;
   }
 }

@@ -1,9 +1,9 @@
 {
 	"id": "docxer",
 	"name": "Docxer",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Import Word files into obsidian. Adds a preview mode for .docx files and the ability to convert them to markdown (.md) files.",
+	"description": "Import Word files easily. Adds a preview mode for .docx files and the ability to convert them to markdown (.md) files.",
 	"author": "Developer-Mike",
 	"authorUrl": "https://github.com/Developer-Mike",
 	"isDesktopOnly": false

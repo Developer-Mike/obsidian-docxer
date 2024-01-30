@@ -26,8 +26,8 @@ export class DocxerSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName("Delete file after conversion")
-      .setDesc("Delete file after pressing the conversion button.")
+      .setName("Delete source file after conversion")
+      .setDesc("Delete source file after pressing the conversion button.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.deleteFileAfterConversion)
@@ -38,7 +38,7 @@ export class DocxerSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Attachments Folder")
+      .setName("Attachments folder")
       .setDesc("Specify the destination for attachments extracted during file conversion.")
       .addDropdown((dropdown) =>
         dropdown
@@ -56,7 +56,7 @@ export class DocxerSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Custom Attachments Folder")
+      .setName("Custom attachments folder")
       .setDesc("Specify the name of the folder where attachments will be extracted.")
       .addText((text) =>
         text
