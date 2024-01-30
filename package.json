@@ -1,7 +1,7 @@
 {
 	"name": "docxer",
 	"version": "1.0.0",
-	"description": "Calculate LaTeX formulas inside Obsidian.",
+	"description": "",
 	"main": "src/main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
