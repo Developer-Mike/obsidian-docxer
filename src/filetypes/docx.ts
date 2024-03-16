@@ -1,8 +1,7 @@
 import ConvertableFileView from "./convertable-file-view";
 import * as mammoth from "mammoth";
 import { renderAsync } from 'docx-preview';
-import * as path from "path";
-import { createMissingFolders, toObsidianPath, toValidFilename } from "src/utils";
+import { createMissingFolders, joinPath, toObsidianPath, toValidFilename } from "src/utils";
 import { htmlToMarkdown } from "obsidian";
 
 export default class DocxFileView extends ConvertableFileView {
@@ -30,7 +29,7 @@ export default class DocxFileView extends ConvertableFileView {
       convertImage: mammoth.images.imgElement((image: any) => {
         return image.read().then((imageBinary: any) => {
           const filename = toValidFilename(image.altText) + "." + image.contentType.split("/")[1];
-          const filepath = toObsidianPath(path.join(attachmentsDirectory, filename));
+          const filepath = toObsidianPath(joinPath(attachmentsDirectory, filename));
 
           createMissingFolders(this.app, filepath);
           this.app.vault.createBinary(filepath, imageBinary);

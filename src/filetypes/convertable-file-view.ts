@@ -1,6 +1,6 @@
 import { Notice, TFile, TextFileView, WorkspaceLeaf } from "obsidian";
-import * as path from "path";
 import DocxerPlugin from "src/main";
+import { dirname, filename, joinPath } from "src/utils";
 
 export default abstract class ConvertableFileView extends TextFileView {
   plugin: DocxerPlugin;
@@ -72,12 +72,13 @@ export default abstract class ConvertableFileView extends TextFileView {
   private async convertFile() {
     if (!this.file) return;
 
-    const targetFilepath = path.join(path.dirname(this.file.path), path.basename(this.file.path, path.extname(this.file.path)) + ".md");
+    const targetFilepath = joinPath(dirname(this.file.path), filename(this.file.path, false) + '.md');
+    console.log(this.file.path, targetFilepath);
     const attachmentsDirectory = {
       "vault": "",
       "custom": this.plugin.settings.customAttachmentsFolder,
-      "same": path.dirname(targetFilepath),
-      "subfolder": path.join(path.dirname(targetFilepath), this.plugin.settings.customAttachmentsFolder)
+      "same": dirname(targetFilepath),
+      "subfolder": joinPath(dirname(this.file.path), this.plugin.settings.customAttachmentsFolder)
     }[this.plugin.settings.attachmentsFolder];
 
     const markdown = await this.toMarkdown(attachmentsDirectory);
