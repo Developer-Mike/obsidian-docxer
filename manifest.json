@@ -1,8 +1,8 @@
 {
 	"id": "docxer",
 	"name": "Docxer",
-	"version": "2.0.0",
-	"minAppVersion": "0.15.0",
+	"version": "1.0.2",
+	"minAppVersion": "1.5.0",
 	"description": "Import Word files easily. Adds a preview mode for .docx files and the ability to convert them to markdown (.md) files.",
 	"author": "Developer-Mike",
 	"authorUrl": "https://github.com/Developer-Mike",
