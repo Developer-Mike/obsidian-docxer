@@ -1,25 +1,25 @@
-import { Plugin } from 'obsidian';
-import { DocxerPluginSettings, DocxerSettingTab, DEFAULT_SETTINGS } from './settings';
-import { registerFilePreviews } from './file-previews';
+import DocxFileView from "./convertable-file-views/docx"
+import ConvertableFileView from "./core/convertable-file-view"
+import SettingsManager from "./settings"
+import { Plugin, WorkspaceLeaf } from "obsidian"
+
+export const FILETYPE_MAP: { [key: string]: new(leaf: WorkspaceLeaf, plugin: DocxerPlugin) => ConvertableFileView } = {
+  "docx": DocxFileView
+}
 
 export default class DocxerPlugin extends Plugin {
-  settings: DocxerPluginSettings;
+  settings: SettingsManager
+  
+	async onload() {    
+    this.settings = new SettingsManager(this)
+    await this.settings.loadSettings()
+    this.settings.addSettingsTab()
 
-	async onload() {
-    this.initSettings();
-    registerFilePreviews(this);
+    for (const [fileExtension, viewClass] of Object.entries(FILETYPE_MAP)) {
+      this.registerView((viewClass as any).VIEW_TYPE_ID, (leaf) => new viewClass(leaf, this))
+      this.registerExtensions([fileExtension], (viewClass as any).VIEW_TYPE_ID)
+    }
 	}
 
-  async initSettings() {
-    await this.loadSettings();
-    this.addSettingTab(new DocxerSettingTab(this.app, this));
-  }
-
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
-
-  async saveSettings() {
-    await this.saveData(this.settings);
-  }
+  onunload() {}
 }
