@@ -72,6 +72,12 @@ export default abstract class ConvertableFileView extends TextFileView {
   private async convertFile() {
     if (!this.file) return
 
+    const convertedFilePath = FileUtils.toUnixPath(this.file.path).replace(/\.[^\.]*$/, ".md")
+    if (this.app.vault.getAbstractFileByPath(convertedFilePath)) {
+      new Notice("A file with the same name already exists.")
+      return
+    }
+
     // Get the directory where the attachments will be saved
     const attachmentsDirectory = {
       "vault": "",
@@ -88,7 +94,6 @@ export default abstract class ConvertableFileView extends TextFileView {
     }
 
     // Create the converted markdown file
-    const convertedFilePath = FileUtils.toUnixPath(this.file.path).replace(/\.[^\.]*$/, ".md")
     const convertedFile = await this.app.vault.create(convertedFilePath, markdown)
     this.leaf.openFile(convertedFile)
 

@@ -1,5 +1,5 @@
 import DocxFileView from "./convertable-file-views/docx"
-import ConvertableFileView from "./core/convertable-file-view"
+import ConvertableFileView from "./core/convertible-file-view"
 import SettingsManager from "./settings"
 import { Plugin, WorkspaceLeaf } from "obsidian"
 

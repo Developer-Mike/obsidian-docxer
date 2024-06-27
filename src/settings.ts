@@ -3,6 +3,7 @@ import DocxerPlugin from "./main"
 
 export interface DocxerPluginSettings {
   deleteFileAfterConversion: boolean
+  importComments: boolean
   fallbackAttachmentName: string
   attachmentsFolder: "vault" | "custom" | "same" | "subfolder"
   customAttachmentsFolder: string
@@ -10,6 +11,7 @@ export interface DocxerPluginSettings {
 
 export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
   deleteFileAfterConversion: false,
+  importComments: false,
   fallbackAttachmentName: "Attachment",
   attachmentsFolder: "subfolder",
   customAttachmentsFolder: "Attachments"
@@ -73,6 +75,21 @@ export class DocxerPluginSettingTab extends PluginSettingTab {
       )
 
     new Setting(containerEl)
+      .setName("Import docx comments")
+      .setDesc("Import comments from docx files using reference links. Comments will be placed at the end of the markdown file.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.settingsManager.getSetting('importComments'))
+          .onChange(async (value) => await this.settingsManager.setSetting({ importComments: value }))
+      )
+
+    new Setting(containerEl)
+      .setHeading()
+      .setClass('docxer-settings-heading')
+      .setName("Attachments")
+      .setDesc("Settings related to attachments extracted during file conversion.")
+
+    new Setting(containerEl)
       .setName("Fallback attachment name")
       .setDesc("Fallback name if the attachment file has no alt text or is written using only invalid characters.")
       .addText((text) =>
@@ -107,23 +124,6 @@ export class DocxerPluginSettingTab extends PluginSettingTab {
       )
 
     this.addKofiButton(containerEl)
-  }
-
-  private createFeatureHeading(containerEl: HTMLElement, label: string, description: string, settingsKey: keyof DocxerPluginSettings): Setting {
-    return new Setting(containerEl)
-      .setHeading()
-      .setClass('docxer-settings-heading')
-      .setName(label)
-      .setDesc(description)
-      .addToggle((toggle) =>
-        toggle
-          .setTooltip("Requires a reload to take effect.")
-          .setValue(this.settingsManager.getSetting(settingsKey) as boolean)
-          .onChange(async (value) => {
-            await this.settingsManager.setSetting({ [settingsKey]: value })
-            new Notice("Reload obsidian to apply the changes.")
-          })
-      )
   }
 
   private addKofiButton(containerEl: HTMLElement) {

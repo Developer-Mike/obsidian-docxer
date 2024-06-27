@@ -1,11 +1,12 @@
 import * as mammoth from "mammoth"
 import { renderAsync } from 'docx-preview'
-import { htmlToMarkdown } from "obsidian"
-import ConvertableFileView from "src/core/convertable-file-view"
+import ConvertibleFileView from "src/core/convertible-file-view"
 import FileUtils from "src/utils/file-utils"
 import { extensions } from "mime-types"
+import ObsidianTurndown from "src/utils/obsidian-turndown"
+import { htmlToMarkdown } from "obsidian"
 
-export default class DocxFileView extends ConvertableFileView {
+export default class DocxFileView extends ConvertibleFileView {
   static readonly VIEW_TYPE_ID = "docx-view"
 
   getViewType(): string {
@@ -29,22 +30,78 @@ export default class DocxFileView extends ConvertableFileView {
     // Convert DOCX to HTML
     const fileBuffer = await this.app.vault.readBinary(this.file)
     const html = await mammoth.convertToHtml({ arrayBuffer: fileBuffer }, {
+      styleMap: this.plugin.settings.getSetting("importComments") ? ["comment-reference => sup"] : undefined,
       convertImage: mammoth.images.imgElement(async (image: any) => {
+        console.debug(`Extracting image ${image.altText ?? ""}`)
         const imageBinary = await image.read()
 
         const fallbackFilename = this.plugin.settings.getSetting("fallbackAttachmentName")
-        const attachmentAltText = image.altText ?? ""
+        const attachmentAltText = image.altText?.replace(/\n/g, " ") ?? ""
         const fileExtension = extensions[image.contentType]?.first() || "png"
 
         const path = await FileUtils.createBinary(this.app, attachmentsDirectory, attachmentAltText, fallbackFilename, fileExtension, imageBinary)
-        console.log(`Extracted image to ${path}`)
+        console.debug(`Extracted image to ${path}`)
 
         return { src: path.contains(" ") ? `<${path}>` : path, alt: attachmentAltText }
       })
     })
 
     // Convert HTML to Markdown
-    const markdown = htmlToMarkdown(html.value)
+    let markdown
+    if (!this.plugin.settings.getSetting("importComments")) {
+      markdown = htmlToMarkdown(html.value)
+    } else {
+      const turndownService = ObsidianTurndown.getService()
+
+      turndownService.addRule('comments-sup', {
+        filter: ['sup'],
+        replacement: function (content) {
+          // [[MS2]](#comment-1) -> MS
+          const author = content.match(/\[\[(\D+)\d*\]/)?.[1] ?? "Unknown Author"
+          // [[MS2]](#comment-1) -> 2
+          const commentNumber = content.match(/(\d+)/)?.[1] ?? "1"
+          // [[MS2]](#comment-1) -> comment-1
+          const commentId = content.match(/#([^\)]+)/)?.[1] ?? "comment-0"
+
+          return ` ([[#^${commentId}|Comment ${author} ${commentNumber}]])`
+        }
+      })
+
+      turndownService.addRule('comments-description-list', {
+        filter: ['dl'],
+        replacement: function (content) {
+          console.log(content)
+          /*
+          Comment [MS1]
+
+          Hey [↑](#comment-ref-0)
+
+          Comment [AD2]
+
+          Test comment 2 [↑](#comment-ref-1)
+          */
+          const comments = content.match(/Comment \[(\D+)\d+\]\n\n[\s\S]+? \[.\]\(#comment-ref-(\d+)\)/g)
+          if (!comments) return content
+
+          const commentsCallouts = comments.map((comment) => {
+            const author = comment.match(/Comment \[(\D+)\d+\]/)?.[1] ?? "Unknown Author"
+            const number = comment.match(/Comment \[\D+(\d+)\]/)?.[1] ?? "1"
+            const id = comment.match(/Comment \[\D+\d+\]\n\n[\s\S]+? \[.\]\(#comment-ref-(\d+)\)/)?.[1] ?? "0"
+            const content = comment.match(/Comment \[\D+\d+\]\n\n([\s\S]+?) \[.\]\(#comment-ref-\d+\)/)?.[1] ?? ""
+
+            return (
+                `>[!QUOTE] **Comment ${author} ${number}**\n`
+              + `> ${content}\n`
+              + `^comment-${id}`
+            )
+          })
+
+          return "---" + "\n\n" + commentsCallouts.join("\n\n")
+        }
+      })
+
+      markdown = turndownService.turndown(html.value)
+    }
 
     return markdown
   }

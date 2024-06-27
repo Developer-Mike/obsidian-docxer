@@ -23,7 +23,7 @@ export default class FileUtils {
 
   static toValidFilename(filename: string): string {
     // " * / : < > ? \ | + , . ; = [ ] ! @
-    return filename.replace(/[\/\\:*?"<>|+,.=;!@[\]]/g, "")
+    return filename.replace(/[\/\\:*?"<>|+,.=;!@[\]\n]/g, "")
   }
 
   static async createMissingFolders(app: App, filepath: string) {
