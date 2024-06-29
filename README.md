@@ -48,7 +48,6 @@ Please consider supporting the plugin. The two easiest ways to support the plugi
 ## Screenshots
 ![Docx Preview](assets/docx-preview.png)
 ![Converted File](assets/converted-file.png)
-![Settings](assets/settings.png)
 
 ## Contributing
 All contributions are welcome! Here's how you can help:
