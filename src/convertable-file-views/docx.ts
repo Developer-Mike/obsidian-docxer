@@ -2,9 +2,9 @@ import * as mammoth from "mammoth"
 import { renderAsync } from 'docx-preview'
 import ConvertibleFileView from "src/core/convertible-file-view"
 import FileUtils from "src/utils/file-utils"
-import { extensions } from "mime-types"
 import ObsidianTurndown from "src/utils/obsidian-turndown"
 import { htmlToMarkdown } from "obsidian"
+import MimeUtils from "src/utils/mime-utils"
 
 export default class DocxFileView extends ConvertibleFileView {
   static readonly VIEW_TYPE_ID = "docx-view"
@@ -37,7 +37,7 @@ export default class DocxFileView extends ConvertibleFileView {
 
         const fallbackFilename = this.plugin.settings.getSetting("fallbackAttachmentName")
         const attachmentAltText = image.altText?.replace(/\n/g, " ") ?? ""
-        const fileExtension = extensions[image.contentType]?.first() || "png"
+        const fileExtension = MimeUtils.EXTENSIONS[image.contentType] ?? "png"
 
         const path = await FileUtils.createBinary(this.app, attachmentsDirectory, attachmentAltText, fallbackFilename, fileExtension, imageBinary)
         console.debug(`Extracted image to ${path}`)

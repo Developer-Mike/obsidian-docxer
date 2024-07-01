@@ -2,7 +2,7 @@ import { Notice, TFile, TextFileView, WorkspaceLeaf } from "obsidian"
 import DocxerPlugin from "src/main"
 import FileUtils from "src/utils/file-utils"
 
-export default abstract class ConvertableFileView extends TextFileView {
+export default abstract class ConvertibleFileView extends TextFileView {
   plugin: DocxerPlugin
   fileContent: string
   header: HTMLElement | null = null

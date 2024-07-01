@@ -4,7 +4,6 @@
 		"dev": "node esbuild.config.mjs"
 	},
 	"devDependencies": {
-		"@types/mime-types": "^2.1.4",
 		"@types/node": "^16.11.6",
 		"@types/turndown": "^5.0.4",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
@@ -19,7 +18,6 @@
 		"docx-preview": "^0.3.0",
 		"esbuild-sass-plugin": "^2.6.0",
 		"mammoth": "^1.6.0",
-		"mime-types": "^2.1.35",
 		"monkey-around": "^2.3.0",
 		"sass": "^1.70.0",
 		"turndown": "^7.2.0"

@@ -1,9 +1,9 @@
 import DocxFileView from "./convertable-file-views/docx"
-import ConvertableFileView from "./core/convertible-file-view"
+import ConvertibleFileView from "./core/convertible-file-view"
 import SettingsManager from "./settings"
 import { Plugin, WorkspaceLeaf } from "obsidian"
 
-export const FILETYPE_MAP: { [key: string]: new(leaf: WorkspaceLeaf, plugin: DocxerPlugin) => ConvertableFileView } = {
+export const FILETYPE_MAP: { [key: string]: new(leaf: WorkspaceLeaf, plugin: DocxerPlugin) => ConvertibleFileView } = {
   "docx": DocxFileView
 }
 
