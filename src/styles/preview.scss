@@ -23,4 +23,8 @@
   background-color: var(--background-primary) !important;
 
   transform-origin: center top;
+
+  & article {
+    user-select: text;
+  }
 }
