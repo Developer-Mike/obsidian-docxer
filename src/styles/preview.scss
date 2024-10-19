@@ -9,7 +9,18 @@
   background-color: var(--background-secondary);
 }
 
+.docxer-embed {
+  max-height: 800px;
+  overflow: auto;
+
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
 .docx-wrapper {
   padding: 0 !important;
   background-color: var(--background-primary) !important;
+
+  transform-origin: center top;
 }

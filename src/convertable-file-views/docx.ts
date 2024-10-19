@@ -3,8 +3,9 @@ import { renderAsync } from 'docx-preview'
 import ConvertibleFileView from "src/core/convertible-file-view"
 import FileUtils from "src/utils/file-utils"
 import ObsidianTurndown from "src/utils/obsidian-turndown"
-import { htmlToMarkdown } from "obsidian"
+import { htmlToMarkdown, TFile } from "obsidian"
 import MimeUtils from "src/utils/mime-utils"
+import DocxerPlugin from "src/main"
 
 export default class DocxFileView extends ConvertibleFileView {
   static readonly VIEW_TYPE_ID = "docx-view"
@@ -13,15 +14,32 @@ export default class DocxFileView extends ConvertibleFileView {
     return DocxFileView.VIEW_TYPE_ID
   }
 
-  async getFilePreview(): Promise<HTMLElement | null> {
-    if (!this.file) return null
+  static async getFilePreview(plugin: DocxerPlugin, file: TFile | null): Promise<HTMLElement | null> {
+    if (!file) return null
 
     const view = document.createElement("div")
 
-    const fileBuffer = await this.app.vault.readBinary(this.file)
-    await renderAsync(fileBuffer, view)
+    const fileBuffer = await plugin.app.vault.readBinary(file)
+    await renderAsync(fileBuffer, view, view, {
+      renderComments: plugin.settings.getSetting("importComments"),
+    })
+
+    const docxWrapper = view.querySelector(".docx-wrapper") as HTMLElement | null
+    if (!docxWrapper) return view
+
+    const docx = docxWrapper.querySelector(".docx") as HTMLElement | null
+    if (!docx) return view
+
+    new ResizeObserver(() => {
+      const scale = Math.min(1, view.clientWidth / docx.clientWidth)
+      docxWrapper.style.transform = `scale(${scale})`
+    }).observe(view)
 
     return view
+  }
+
+  async getFilePreview(): Promise<HTMLElement | null> {
+    return DocxFileView.getFilePreview(this.plugin, this.file)
   }
 
   async getMarkdownContent(attachmentsDirectory: string): Promise<string | null> {
