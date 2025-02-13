@@ -45,6 +45,9 @@ Please consider supporting the plugin. The two easiest ways to support the plugi
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X27IA08)
 
+## Implementation
+Docxer uses [docx-preview](https://www.npmjs.com/package/docx-preview) to render the previews, [mammoth](https://www.npmjs.com/package/mammoth) to convert `docx` to `HTML` and [turndown](https://www.npmjs.com/package/turndown) to finally convert the `HTML` to Markdown.
+
 ## Screenshots
 ![Docx Preview](assets/docx-preview.png)
 ![Converted File](assets/converted-file.png)
