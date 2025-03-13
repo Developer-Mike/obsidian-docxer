@@ -14,7 +14,7 @@ export default abstract class ConvertibleFileView extends TextFileView {
 	}
 
 	getDisplayText(): string {
-		return this.file?.name ?? "???"
+		return this.file?.basename ?? "???"
 	}
 
 	getContext(file?: TFile) {
