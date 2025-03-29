@@ -7,6 +7,7 @@ export interface DocxerPluginSettings {
   fallbackAttachmentName: string
   attachmentsFolder: "vault" | "custom" | "same" | "subfolder"
   customAttachmentsFolder: string
+  useImageAltAsFilename: boolean
 }
 
 export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
@@ -14,7 +15,8 @@ export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
   importComments: false,
   fallbackAttachmentName: "Attachment",
   attachmentsFolder: "subfolder",
-  customAttachmentsFolder: "Attachments"
+  customAttachmentsFolder: "Attachments",
+  useImageAltAsFilename: false,
 }
 
 export default class SettingsManager {
@@ -121,6 +123,15 @@ export class DocxerPluginSettingTab extends PluginSettingTab {
           .setPlaceholder("Attachments")
           .setValue(this.settingsManager.getSetting('customAttachmentsFolder'))
           .onChange(async (value) => await this.settingsManager.setSetting({ customAttachmentsFolder: value }))
+      )
+
+    new Setting(containerEl)
+      .setName("Use image alt text as filename")
+      .setDesc("Use the alt text of the image as the filename. If the alt text is empty, the fallback name will be used.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.settingsManager.getSetting('useImageAltAsFilename'))
+          .onChange(async (value) => await this.settingsManager.setSetting({ useImageAltAsFilename: value }))
       )
 
     this.addKofiButton(containerEl)

@@ -54,13 +54,15 @@ export default class DocxFileView extends ConvertibleFileView {
         const imageBinary = await image.read()
 
         const fallbackFilename = this.plugin.settings.getSetting("fallbackAttachmentName")
-        const attachmentAltText = image.altText?.replace(/\n/g, " ") ?? ""
+        let attachmentFilename = this.file?.name.replace(/\.docx$/, "") ?? ""
+        if (this.plugin.settings.getSetting("useImageAltAsFilename"))
+          attachmentFilename = image.altText?.replace(/\n/g, " ") ?? ""
         const fileExtension = MimeUtils.EXTENSIONS[image.contentType] ?? "png"
 
-        const path = await FileUtils.createBinary(this.app, attachmentsDirectory, attachmentAltText, fallbackFilename, fileExtension, imageBinary)
+        const path = await FileUtils.createBinary(this.app, attachmentsDirectory, attachmentFilename, fallbackFilename, fileExtension, imageBinary)
         console.debug(`Extracted image to ${path}`)
 
-        return { src: path.contains(" ") ? `<${path}>` : path, alt: attachmentAltText }
+        return { src: path.contains(" ") ? `<${path}>` : path, alt: attachmentFilename }
       })
     })
 
