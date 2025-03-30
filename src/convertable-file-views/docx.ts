@@ -87,6 +87,23 @@ export default class DocxFileView extends ConvertibleFileView {
         }
       })
 
+      // Rule for internal TOC links (links starting with #)
+      turndownService.addRule('internalLink', {
+        filter: function (node, options) {
+          // Check if it's an 'a' tag with an 'href' starting with '#'
+          return !!(node.nodeName === 'A' && node.getAttribute('href')?.startsWith('#'))
+        },
+        replacement: function (content, node: HTMLAnchorElement) {
+          const linkText = content.trim()
+          if (linkText) return `[[#${linkText}]]`
+
+          // Fallback if link text is empty - try using the href target ID directly
+          const href = node.getAttribute('href') || ''
+          console.warn(`Internal link with href "${href}" has no text content. Creating link to target ID.`)
+          return `[[${href}]]` // Link to the raw href target (e.g., [[#_Toc12345]])
+        }
+      })
+
       turndownService.addRule('comments-description-list', {
         filter: ['dl'],
         replacement: function (content) {
