@@ -24,3 +24,5 @@ data.json
 
 # Exclude large mp4 files
 assets/*.mp4
+
+dist
