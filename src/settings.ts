@@ -4,6 +4,8 @@ import DocxerPlugin from "./main"
 export interface DocxerPluginSettings {
   deleteFileAfterConversion: boolean
   importComments: boolean
+  embedImageData: boolean
+  ignoreAttachments: boolean
   fallbackAttachmentName: string
   attachmentsFolder: "vault" | "custom" | "same" | "subfolder"
   customAttachmentsFolder: string
@@ -13,6 +15,8 @@ export interface DocxerPluginSettings {
 export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
   deleteFileAfterConversion: false,
   importComments: false,
+  embedImageData: false,
+  ignoreAttachments: false,
   fallbackAttachmentName: "Attachment",
   attachmentsFolder: "subfolder",
   customAttachmentsFolder: "Attachments",
@@ -85,25 +89,105 @@ export class DocxerPluginSettingTab extends PluginSettingTab {
           .onChange(async (value) => await this.settingsManager.setSetting({ importComments: value }))
       )
 
+    /**
+     * IMAGE HANDLING STATE MACHINE
+     * 
+     * Three valid states for image handling:
+     * 1. DEFAULT (ignoreAttachments=false, embedImageData=false)
+     *    - Images are extracted to separate files
+     *    - All attachment settings are enabled
+     * 
+     * 2. EMBED (ignoreAttachments=false, embedImageData=true)
+     *    - Images are embedded as base64 data URLs
+     *    - File extraction settings are disabled
+     * 
+     * 3. IGNORE (ignoreAttachments=true, embedImageData=false)
+     *    - Images are completely ignored
+     *    - Only placeholder text shown
+     *    - ALL attachment settings are disabled
+     * 
+     * Invalid state prevented: Both true
+     * - When ignoreAttachments is turned ON, embedImageData is forced OFF
+     * - When ignoreAttachments is ON, embed option is disabled
+     */
+
+    // Main toggle for ignoring attachments entirely (master switch)
+    const ignoreAttachmentsSetting = new Setting(containerEl)
+      .setName("Ignore attachments")
+      .setDesc("Completely ignore images from the source file. Only the image filename or description will be shown as plain text.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.settingsManager.getSetting('ignoreAttachments'))
+          .onChange(async (value) => {
+            await this.settingsManager.setSetting({ ignoreAttachments: value })
+            // State machine: If ignoring attachments, force embed option OFF
+            if (value) {
+              await this.settingsManager.setSetting({ embedImageData: false })
+            }
+            // Refresh the display to update disabled states
+            this.display()
+          })
+        return toggle
+      })
+
     new Setting(containerEl)
       .setHeading()
       .setClass('docxer-settings-heading')
       .setName("Attachments")
       .setDesc("Settings related to attachments extracted during file conversion.")
 
-    new Setting(containerEl)
+    // Get current state for determining UI enable/disable logic
+    const ignoreAttachments = this.settingsManager.getSetting('ignoreAttachments')
+    const embedImageData = this.settingsManager.getSetting('embedImageData')
+
+    // Embed images option (mutually exclusive with file extraction)
+    // Disabled when ignoreAttachments is ON to prevent invalid state
+    const embedSetting = new Setting(containerEl)
+      .setName("Embed image data in document")
+      .setDesc("Instead of extracting images to files, embed them as base64 data directly in the markdown. Creates self-contained documents but with larger file sizes.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(embedImageData)
+          .setDisabled(ignoreAttachments)  // State machine: Cannot embed if ignoring
+          .onChange(async (value) => {
+            await this.settingsManager.setSetting({ embedImageData: value })
+            // Refresh to update disabled states of file extraction settings
+            this.display()
+          })
+        return toggle
+      })
+
+    // Visual feedback: gray out when disabled
+    if (ignoreAttachments) {
+      embedSetting.descEl.style.opacity = "0.5"
+    }
+
+    /**
+     * FILE EXTRACTION SETTINGS
+     * These settings only apply when extracting images to files (DEFAULT state)
+     * Disabled when:
+     * - ignoreAttachments=true (IGNORE state) - no images processed at all
+     * - embedImageData=true (EMBED state) - images embedded, no files created
+     */
+    const fallbackNameSetting = new Setting(containerEl)
       .setName("Fallback attachment name")
       .setDesc("Fallback name if the attachment file has no alt text or is written using only invalid characters.")
-      .addText((text) =>
+      .addText((text) => {
         text
           .setValue(this.settingsManager.getSetting('fallbackAttachmentName'))
+          .setDisabled(ignoreAttachments || embedImageData)
           .onChange(async (value) => await this.settingsManager.setSetting({ fallbackAttachmentName: value }))
-      )
+        return text
+      })
 
-    new Setting(containerEl)
+    if (ignoreAttachments || embedImageData) {
+      fallbackNameSetting.descEl.style.opacity = "0.5"
+    }
+
+    const folderSetting = new Setting(containerEl)
       .setName("Attachments folder")
       .setDesc("Specify the destination for attachments extracted during file conversion.")
-      .addDropdown((dropdown) =>
+      .addDropdown((dropdown) => {
         dropdown
           .addOptions({
             "vault": "Vault folder",
@@ -112,27 +196,45 @@ export class DocxerPluginSettingTab extends PluginSettingTab {
             "subfolder": "In subfolder under current folder"
           })
           .setValue(this.settingsManager.getSetting('attachmentsFolder'))
+          .setDisabled(ignoreAttachments || embedImageData)
           .onChange(async (value) => await this.settingsManager.setSetting({ attachmentsFolder: value as any }))
-      )
+        return dropdown
+      })
 
-    new Setting(containerEl)
+    if (ignoreAttachments || embedImageData) {
+      folderSetting.descEl.style.opacity = "0.5"
+    }
+
+    const customFolderSetting = new Setting(containerEl)
       .setName("Custom attachments folder")
       .setDesc("Specify the name of the folder where attachments will be extracted.")
-      .addText((text) =>
+      .addText((text) => {
         text
           .setPlaceholder("Attachments")
           .setValue(this.settingsManager.getSetting('customAttachmentsFolder'))
+          .setDisabled(ignoreAttachments || embedImageData)
           .onChange(async (value) => await this.settingsManager.setSetting({ customAttachmentsFolder: value }))
-      )
+        return text
+      })
 
-    new Setting(containerEl)
+    if (ignoreAttachments || embedImageData) {
+      customFolderSetting.descEl.style.opacity = "0.5"
+    }
+
+    const altTextSetting = new Setting(containerEl)
       .setName("Use image alt text as filename")
       .setDesc("Use the alt text of the image as the filename. If the alt text is empty, the fallback name will be used.")
-      .addToggle((toggle) =>
+      .addToggle((toggle) => {
         toggle
           .setValue(this.settingsManager.getSetting('useImageAltAsFilename'))
+          .setDisabled(ignoreAttachments || embedImageData)
           .onChange(async (value) => await this.settingsManager.setSetting({ useImageAltAsFilename: value }))
-      )
+        return toggle
+      })
+
+    if (ignoreAttachments || embedImageData) {
+      altTextSetting.descEl.style.opacity = "0.5"
+    }
 
     this.addKofiButton(containerEl)
   }

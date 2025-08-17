@@ -47,9 +47,46 @@ export default class DocxFileView extends ConvertibleFileView {
 
     // Convert DOCX to HTML
     const fileBuffer = await this.app.vault.readBinary(this.file)
-    const html = await mammoth.convertToHtml({ arrayBuffer: fileBuffer }, {
+    const embedImageData = this.plugin.settings.getSetting("embedImageData")
+    const ignoreAttachments = this.plugin.settings.getSetting("ignoreAttachments")
+    
+    const conversionOptions: any = {
       styleMap: this.plugin.settings.getSetting("importComments") ? ["comment-reference => sup"] : undefined,
-      convertImage: mammoth.images.imgElement(async (image: any) => {
+    }
+    
+    /**
+     * IMAGE CONVERSION STATE MACHINE
+     * Based on settings, handle images in one of three ways:
+     * 
+     * 1. IGNORE state (ignoreAttachments=true)
+     *    - Skip all image processing
+     *    - Return placeholder text only
+     *    - No files or data created
+     * 
+     * 2. EMBED state (embedImageData=true, ignoreAttachments=false)
+     *    - Convert images to base64 data URLs
+     *    - Embed directly in markdown
+     *    - No external files created
+     * 
+     * 3. DEFAULT state (both false)
+     *    - Extract images to separate files
+     *    - Create attachment folders as configured
+     *    - Standard Obsidian behavior
+     */
+    if (ignoreAttachments) {
+      // IGNORE state: Completely skip images
+      conversionOptions.convertImage = mammoth.images.imgElement(async (image: any) => {
+        const altText = image.altText || "image"
+        console.debug(`Ignoring image: ${altText}`)
+        // Return just the alt text as a placeholder - no image element
+        return { src: "", alt: `[Image: ${altText}]` }
+      })
+    } else if (embedImageData) {
+      // EMBED state: Convert to base64 data URLs
+      conversionOptions.convertImage = mammoth.images.dataUri
+    } else {
+      // DEFAULT state: Extract to files
+      conversionOptions.convertImage = mammoth.images.imgElement(async (image: any) => {
         console.debug(`Extracting image ${image.altText ?? ""}`)
         const imageBinary = await image.read()
 
@@ -64,7 +101,9 @@ export default class DocxFileView extends ConvertibleFileView {
 
         return { src: path.contains(" ") ? `<${path}>` : path, alt: attachmentFilename }
       })
-    })
+    }
+    
+    const html = await mammoth.convertToHtml({ arrayBuffer: fileBuffer }, conversionOptions)
 
     // Convert HTML to Markdown
     let markdown
