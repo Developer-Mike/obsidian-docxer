@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-and-upload:
@@ -28,6 +30,14 @@ jobs:
 
       - name: Verify Files Exist
         run: ls -la dist/main.js dist/styles.css dist/manifest.json
+
+      - name: Generate artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/main.js
+            dist/styles.css
+            dist/manifest.json
 
       - name: Upload Release Assets (Original Names)
         uses: softprops/action-gh-release@v1
