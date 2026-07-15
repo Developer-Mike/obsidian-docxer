@@ -35,10 +35,21 @@ Open the Community Plugins tab in the settings and search for "Docxer" (or click
     </ul>
 </details>
 
+## Supported Files
+
+- `.docx`
+- `.rtf`
+- `.rtf.doc`
+- `.doc` files that are actually RTF content
+
+Old binary Microsoft Word `.doc` files are not converted. When a `.doc` file does not start with RTF data, Docxer shows a warning instead of trying to parse it.
+
 ## Usage
-1. Add a .docx file to your vault.
+1. Add a supported document file to your vault.
 2. Open the file in Obsidian.
 3. Click the "Convert" button in the top right corner of the editor to convert the file to markdown.
+
+For files named like `NLC Tasks.rtf.doc`, conversion creates `NLC Tasks.md`.
 
 ## Support
 Please consider supporting the plugin. The two easiest ways to support the plugin are either by starring ⭐ the repository or by donating any amount on [Ko-fi](https://ko-fi.com/X8X27IA08) ❤️. Thank you!
@@ -46,7 +57,9 @@ Please consider supporting the plugin. The two easiest ways to support the plugi
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X27IA08)
 
 ## Implementation
-Docxer uses [docx-preview](https://www.npmjs.com/package/docx-preview) to render the previews, [mammoth](https://www.npmjs.com/package/mammoth) to convert `docx` to `HTML` and [turndown](https://www.npmjs.com/package/turndown) to finally convert the `HTML` to Markdown.
+Docxer uses [docx-preview](https://www.npmjs.com/package/docx-preview) to render DOCX previews, [mammoth](https://www.npmjs.com/package/mammoth) to convert `docx` to `HTML` and [turndown](https://www.npmjs.com/package/turndown) to finally convert the `HTML` to Markdown.
+
+RTF support uses a local parser in `src/utils/rtf-utils.ts`. It focuses on readable text conversion for common RTF files and handles line breaks, tabs, encoded characters, bullets, and RTF-backed `.doc` files.
 
 ## Screenshots
 ![Docx Preview](assets/docx-preview.png)

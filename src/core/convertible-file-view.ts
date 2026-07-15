@@ -66,13 +66,17 @@ export default abstract class ConvertibleFileView extends EditableFileView {
 
 	getViewData(): string {
     return this.fileContent
-	}
+  }
 
   abstract getMarkdownContent(attachmentsDirectory: string): Promise<string | null>
+  protected getConvertedFilePath(file: TFile): string {
+    return FileUtils.toUnixPath(file.path).replace(/\.[^\.]*$/, ".md")
+  }
+
   private async convertFile() {
     if (!this.file) return
 
-    const convertedFilePath = FileUtils.toUnixPath(this.file.path).replace(/\.[^\.]*$/, ".md")
+    const convertedFilePath = this.getConvertedFilePath(this.file)
     if (this.app.vault.getAbstractFileByPath(convertedFilePath)) {
       new Notice("A file with the same name already exists.")
       return
