@@ -10,6 +10,7 @@ export interface DocxerPluginSettings {
   attachmentsFolder: "vault" | "custom" | "same" | "subfolder"
   customAttachmentsFolder: string
   useImageAltAsFilename: boolean
+  scrollPositions: Record<string, number>
 }
 
 export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
@@ -21,6 +22,7 @@ export const DEFAULT_SETTINGS: Partial<DocxerPluginSettings> = {
   attachmentsFolder: "subfolder",
   customAttachmentsFolder: "Attachments",
   useImageAltAsFilename: false,
+  scrollPositions: {},
 }
 
 export default class SettingsManager {
@@ -45,6 +47,25 @@ export default class SettingsManager {
 
   getSetting<T extends keyof DocxerPluginSettings>(key: T): DocxerPluginSettings[T] {
     return this.settings[key]
+  }
+
+  getScrollPosition(filePath: string): number | null {
+    const scrollPositions = this.settings.scrollPositions
+    if (!scrollPositions || typeof scrollPositions !== "object") return null
+
+    const scrollTop = scrollPositions[filePath]
+    if (typeof scrollTop !== "number" || !Number.isFinite(scrollTop) || scrollTop < 0) return null
+
+    return scrollTop
+  }
+
+  setScrollPosition(filePath: string, scrollTop: number): void {
+    if (!Number.isFinite(scrollTop) || scrollTop < 0) return
+
+    if (!this.settings.scrollPositions || typeof this.settings.scrollPositions !== "object")
+      this.settings.scrollPositions = {}
+
+    this.settings.scrollPositions[filePath] = scrollTop
   }
 
   async setSetting(data: Partial<DocxerPluginSettings>) {
