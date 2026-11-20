@@ -25,7 +25,7 @@ export default class DocxerEmbedComponent extends Component {
 
   // override
   async loadFile() {
-    const preview = await (this.view as any).getFilePreview(this.plugin, this.file)
+    const preview = await (this.view as any).getFilePreview(this.plugin, this.file, { promptForPassword: false })
     if (!preview) return
 
     this.info.containerEl.appendChild(preview)

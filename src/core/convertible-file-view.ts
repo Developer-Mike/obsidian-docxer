@@ -89,7 +89,7 @@ export default abstract class ConvertibleFileView extends EditableFileView {
     // Convert the file to markdown
     const markdown = await this.getMarkdownContent(attachmentsDirectory)
     if (!markdown) {
-      new Notice("Error converting file to markdown.")
+      new Notice("Could not convert this file. If it is password protected, unlock it and try again.")
       return
     }
 

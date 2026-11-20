@@ -18,6 +18,16 @@
   border-radius: var(--radius-s);
 }
 
+.docxer-locked,
+.docxer-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--size-4-2);
+  padding: var(--size-4-4);
+  color: var(--text-muted);
+}
+
 .docx-wrapper {
   padding: 0 !important;
   background-color: var(--background-primary) !important;

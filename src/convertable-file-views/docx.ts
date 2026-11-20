@@ -6,6 +6,7 @@ import ObsidianTurndown from "src/utils/obsidian-turndown"
 import { htmlToMarkdown, TFile } from "obsidian"
 import MimeUtils from "src/utils/mime-utils"
 import DocxerPlugin from "src/main"
+import { createLockedPreview, readDocxBuffer } from "src/utils/protected-docx"
 
 export default class DocxFileView extends ConvertibleFileView {
   static readonly VIEW_TYPE_ID = "docx-view"
@@ -14,12 +15,34 @@ export default class DocxFileView extends ConvertibleFileView {
     return DocxFileView.VIEW_TYPE_ID
   }
 
-  static async getFilePreview(plugin: DocxerPlugin, file: TFile | null): Promise<HTMLElement | null> {
+  static async getFilePreview(
+    plugin: DocxerPlugin,
+    file: TFile | null,
+    options: { promptForPassword?: boolean } = {},
+  ): Promise<HTMLElement | null> {
     if (!file) return null
+    const promptForPassword = options.promptForPassword ?? true
 
+    try {
+      const fileBuffer = await readDocxBuffer(plugin, file, { prompt: promptForPassword })
+      if (!fileBuffer) {
+        return createLockedPreview(file, () =>
+          DocxFileView.getFilePreview(plugin, file, { promptForPassword: true })
+        )
+      }
+
+      return await DocxFileView.renderPreview(plugin, fileBuffer)
+    } catch (error) {
+      const view = document.createElement("div")
+      view.className = "docxer-error"
+      view.innerText = error instanceof Error ? error.message : "Failed to open this document."
+      return view
+    }
+  }
+
+  private static async renderPreview(plugin: DocxerPlugin, fileBuffer: ArrayBuffer): Promise<HTMLElement> {
     const view = document.createElement("div")
 
-    const fileBuffer = await plugin.app.vault.readBinary(file)
     await renderAsync(fileBuffer, view, view, {
       renderComments: plugin.settings.getSetting("importComments"),
     })
@@ -46,7 +69,8 @@ export default class DocxFileView extends ConvertibleFileView {
     if (!this.file) return null
 
     // Convert DOCX to HTML
-    const fileBuffer = await this.app.vault.readBinary(this.file)
+    const fileBuffer = await readDocxBuffer(this.plugin, this.file, { prompt: true })
+    if (!fileBuffer) return null
     const embedImageData = this.plugin.settings.getSetting("embedImageData")
     const ignoreAttachments = this.plugin.settings.getSetting("ignoreAttachments")
     

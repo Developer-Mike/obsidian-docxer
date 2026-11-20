@@ -40,13 +40,15 @@ Open the Community Plugins tab in the settings and search for "Docxer" (or click
 2. Open the file in Obsidian.
 3. Click the "Convert" button in the top right corner of the editor to convert the file to markdown.
 
+Password-protected Word files prompt for the password when opened or converted. The password is kept in memory for the current session only and is never written to disk. The original encrypted file in your vault is left unchanged.
+
 ## Support
 Please consider supporting the plugin. The two easiest ways to support the plugin are either by starring ⭐ the repository or by donating any amount on [Ko-fi](https://ko-fi.com/X8X27IA08) ❤️. Thank you!
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X27IA08)
 
 ## Implementation
-Docxer uses [docx-preview](https://www.npmjs.com/package/docx-preview) to render the previews, [mammoth](https://www.npmjs.com/package/mammoth) to convert `docx` to `HTML` and [turndown](https://www.npmjs.com/package/turndown) to finally convert the `HTML` to Markdown.
+Docxer uses [docx-preview](https://www.npmjs.com/package/docx-preview) to render the previews, [mammoth](https://www.npmjs.com/package/mammoth) to convert `docx` to `HTML` and [turndown](https://www.npmjs.com/package/turndown) to finally convert the `HTML` to Markdown. Password-protected files are decrypted in memory using the ECMA-376 Agile and Standard encryption specs before preview or conversion.
 
 ## Screenshots
 ![Docx Preview](assets/docx-preview.png)

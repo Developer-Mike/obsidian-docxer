@@ -10,8 +10,21 @@ export const FILETYPE_MAP: { [key: string]: new(leaf: WorkspaceLeaf, plugin: Doc
 
 export default class DocxerPlugin extends Plugin {
   settings: SettingsManager
+  private docxPasswords = new Map<string, string>()
+
+  getDocxPassword(path: string): string | undefined {
+    return this.docxPasswords.get(path)
+  }
+
+  rememberDocxPassword(path: string, password: string) {
+    this.docxPasswords.set(path, password)
+  }
+
+  forgetDocxPassword(path: string) {
+    this.docxPasswords.delete(path)
+  }
   
-	async onload() {    
+	async onload() {     
     this.settings = new SettingsManager(this)
     await this.settings.loadSettings()
     this.settings.addSettingsTab()
@@ -28,5 +41,7 @@ export default class DocxerPlugin extends Plugin {
     }
 	}
 
-  onunload() {}
+  onunload() {
+    this.docxPasswords.clear()
+  }
 }
