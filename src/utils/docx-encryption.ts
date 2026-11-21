@@ -74,13 +74,14 @@ function decryptAgile(encryptionInfo: Uint8Array, encryptedPackage: Uint8Array, 
   const packageSalt = fromBase64(keyData.saltValue)
   const keySalt = fromBase64(encryptedKey.saltValue)
 
-  if (!verifyAgilePassword(password, encryptedKey, keyHash, keyCipher, keySalt, spinCount, keyBits)) {
+  const spun = spinPassword(password, keyHash, keySalt, spinCount)
+  if (!verifyAgilePassword(spun, encryptedKey, keyHash, keyCipher, keySalt, keyBits)) {
     throw new IncorrectPasswordError()
   }
 
   const packageKey = aesDecrypt(
     keyCipher,
-    passwordToKey(password, keyHash, keySalt, spinCount, keyBits, AGILE_BLOCK_KEYS.key),
+    finalizeKey(spun, keyHash, AGILE_BLOCK_KEYS.key, keyBits),
     keySalt,
     fromBase64(encryptedKey.encryptedKeyValue),
   )
@@ -99,23 +100,22 @@ function decryptAgile(encryptionInfo: Uint8Array, encryptedPackage: Uint8Array, 
 }
 
 function verifyAgilePassword(
-  password: string,
+  spun: Uint8Array,
   encryptedKey: Record<string, string>,
   hash: HashName,
   cipher: "cbc",
   salt: Uint8Array,
-  spinCount: number,
   keyBits: number,
 ): boolean {
   const verifierInput = aesDecrypt(
     cipher,
-    passwordToKey(password, hash, salt, spinCount, keyBits, AGILE_BLOCK_KEYS.verifierHashInput),
+    finalizeKey(spun, hash, AGILE_BLOCK_KEYS.verifierHashInput, keyBits),
     salt,
     fromBase64(encryptedKey.encryptedVerifierHashInput),
   )
   const verifierHash = aesDecrypt(
     cipher,
-    passwordToKey(password, hash, salt, spinCount, keyBits, AGILE_BLOCK_KEYS.verifierHashValue),
+    finalizeKey(spun, hash, AGILE_BLOCK_KEYS.verifierHashValue, keyBits),
     salt,
     fromBase64(encryptedKey.encryptedVerifierHashValue),
   )
@@ -198,20 +198,16 @@ function decryptStandardPackage(key: Uint8Array, input: Uint8Array): Uint8Array 
   return concat(...chunks).subarray(0, totalSize)
 }
 
-function passwordToKey(
-  password: string,
-  hash: HashName,
-  salt: Uint8Array,
-  spinCount: number,
-  keyBits: number,
-  blockKey: Uint8Array,
-): Uint8Array {
+function spinPassword(password: string, hash: HashName, salt: Uint8Array, spinCount: number): Uint8Array {
   let key = digest(hash, concat(salt, utf16le(password)))
   for (let i = 0; i < spinCount; i++) {
     key = digest(hash, concat(uint32le(i), key))
   }
-  key = digest(hash, concat(key, blockKey))
-  return resizeKey(key, keyBits / 8)
+  return key
+}
+
+function finalizeKey(spun: Uint8Array, hash: HashName, blockKey: Uint8Array, keyBits: number): Uint8Array {
+  return resizeKey(digest(hash, concat(spun, blockKey)), keyBits / 8)
 }
 
 function decryptPackageChunks(

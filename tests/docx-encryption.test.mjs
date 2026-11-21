@@ -7,21 +7,29 @@ import { spawnSync } from "child_process"
 import officeCrypto from "officecrypto-tool"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-const bundlePath = join(root, "tests/.bundle.mjs")
+const bundleDir = join(root, "tests/.bundle")
 
 await build({
-  entryPoints: [join(root, "src/utils/docx-encryption.ts")],
+  entryPoints: [
+    join(root, "src/utils/docx-encryption.ts"),
+    join(root, "src/utils/docx-unlock-cache.ts"),
+  ],
   bundle: true,
   platform: "node",
   format: "esm",
-  outfile: bundlePath,
+  outdir: bundleDir,
 })
 
 const {
   decryptDocx,
   isEncryptedDocx,
   IncorrectPasswordError,
-} = await import(pathToFileURL(bundlePath).href)
+} = await import(pathToFileURL(join(bundleDir, "docx-encryption.js")).href)
+const {
+  default: DocxUnlockCache,
+  versionsEqual,
+  zeroArrayBuffer,
+} = await import(pathToFileURL(join(bundleDir, "docx-unlock-cache.js")).href)
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -79,6 +87,46 @@ try {
   wrongPasswordThrew = error instanceof IncorrectPasswordError || error?.name === "IncorrectPasswordError"
 }
 assert(wrongPasswordThrew, "wrong password should throw IncorrectPasswordError")
+
+const timedPassword = "timing-password"
+const timedAgile = officeCrypto.encrypt(plain, { password: timedPassword })
+const decryptStarted = performance.now()
+const timedDecrypted = decryptDocx(timedAgile, timedPassword)
+const decryptMs = performance.now() - decryptStarted
+
+const cache = new DocxUnlockCache()
+const version = { path: "timing.docx", mtime: 1, size: timedAgile.length }
+cache.set(1, version, timedDecrypted)
+const cacheStarted = performance.now()
+const cached = cache.get(1, version)
+const cacheMs = performance.now() - cacheStarted
+assert(cached && cached.byteLength === timedDecrypted.byteLength, "session cache should return the decrypted document")
+assert(cacheMs < 20, `cached unlock should be near-instant, took ${cacheMs.toFixed(1)}ms`)
+assert(!cache.get(2, version), "a new session must not reuse the previous unlock grant")
+assert(!cache.hasGrant(1, { ...version, mtime: 2 }), "a changed file must not reuse the previous unlock grant")
+assert(cached !== timedDecrypted, "cached bytes should be a copy, not the original buffer")
+const storedBeforeDelete = cache.records.get(version.path).decrypted
+assert(new Uint8Array(storedBeforeDelete).some((b) => b !== 0), "stored cache buffer should contain non-zero decrypted bytes")
+assert(cache.delete(version.path), "an existing grant should be removable on rename/delete")
+assert(new Uint8Array(storedBeforeDelete).every((b) => b === 0), "delete must zero the cached ArrayBuffer")
+assert(!cache.hasGrant(1, version), "removed grants must not authorize a later preview")
+
+const version2 = { path: "timing.docx", mtime: 2, size: timedAgile.length }
+cache.set(1, version, timedDecrypted)
+const storedBeforeOverwrite = cache.records.get(version.path).decrypted
+cache.set(1, version2, timedDecrypted)
+assert(new Uint8Array(storedBeforeOverwrite).every((b) => b === 0), "overwriting a cache entry must zero the previous ArrayBuffer")
+const storedBeforeClear = cache.records.get(version2.path).decrypted
+cache.clear()
+assert(new Uint8Array(storedBeforeClear).every((b) => b === 0), "clear must zero all cached ArrayBuffers")
+assert(!cache.hasGrant(1, version2), "cleared grants must not authorize a later preview")
+
+const scratch = new Uint8Array([1, 2, 3, 4]).buffer
+zeroArrayBuffer(scratch)
+assert(new Uint8Array(scratch).every((b) => b === 0), "zeroArrayBuffer must overwrite all bytes with zero")
+assert(versionsEqual(version, { ...version }), "versionsEqual should match identical versions")
+assert(!versionsEqual(version, version2), "versionsEqual should reject changed mtime")
+console.log(`agile unlock ${decryptMs.toFixed(1)}ms, cached reopen ${cacheMs.toFixed(1)}ms`)
 
 const samplePath = process.env.DOCX_SAMPLE_PATH
 if (samplePath) {

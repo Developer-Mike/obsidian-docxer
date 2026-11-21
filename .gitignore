@@ -26,4 +26,4 @@ data.json
 assets/*.mp4
 
 dist
-tests/.bundle.mjs
+tests/.bundle

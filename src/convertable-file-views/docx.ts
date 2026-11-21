@@ -1,12 +1,27 @@
 import * as mammoth from "mammoth"
 import { renderAsync } from 'docx-preview'
-import ConvertibleFileView from "src/core/convertible-file-view"
+import ConvertibleFileView, { AuthorizedPreview, LoadToken } from "src/core/convertible-file-view"
 import FileUtils from "src/utils/file-utils"
 import ObsidianTurndown from "src/utils/obsidian-turndown"
 import { htmlToMarkdown, TFile } from "obsidian"
 import MimeUtils from "src/utils/mime-utils"
 import DocxerPlugin from "src/main"
-import { createLockedPreview, readDocxBuffer } from "src/utils/protected-docx"
+import { readDocxBuffer } from "src/utils/protected-docx"
+import { isEncryptedDocx } from "src/utils/docx-encryption"
+import { fileVersion, versionsEqual } from "src/utils/docx-unlock-cache"
+
+const MAX_METADATA_RETRIES = 2
+
+export type RenderedPreview = {
+  el: HTMLElement
+  dispose: () => void
+}
+
+export type AuthorizedPreviewOptions = {
+  promptForPassword?: boolean
+  isCurrent?: () => boolean
+  onEncrypted?: () => void
+}
 
 export default class DocxFileView extends ConvertibleFileView {
   static readonly VIEW_TYPE_ID = "docx-view"
@@ -15,32 +30,103 @@ export default class DocxFileView extends ConvertibleFileView {
     return DocxFileView.VIEW_TYPE_ID
   }
 
-  static async getFilePreview(
+  static async getAuthorizedPreview(
     plugin: DocxerPlugin,
     file: TFile | null,
-    options: { promptForPassword?: boolean } = {},
-  ): Promise<HTMLElement | null> {
+    options: AuthorizedPreviewOptions = {},
+  ): Promise<AuthorizedPreview | null> {
     if (!file) return null
     const promptForPassword = options.promptForPassword ?? true
+    const isCurrent = options.isCurrent ?? (() => true)
 
     try {
-      const fileBuffer = await readDocxBuffer(plugin, file, { prompt: promptForPassword })
-      if (!fileBuffer) {
-        return createLockedPreview(file, () =>
-          DocxFileView.getFilePreview(plugin, file, { promptForPassword: true })
-        )
+      for (let attempt = 0; attempt <= MAX_METADATA_RETRIES; attempt++) {
+        if (!isCurrent()) return null
+
+        const versionBefore = fileVersion(file)
+        const raw = await plugin.app.vault.readBinary(file)
+        if (!isCurrent()) return null
+
+        const version = fileVersion(file)
+        if (!versionsEqual(versionBefore, version)) {
+          if (attempt < MAX_METADATA_RETRIES) continue
+          return {
+            kind: "error",
+            message: "This document changed while opening. Click Retry to try again.",
+            retryable: true,
+            version,
+          }
+        }
+
+        if (isEncryptedDocx(raw)) options.onEncrypted?.()
+
+        const authorized = await plugin.getAuthorizedDocument(file, raw, version, { prompt: promptForPassword })
+        if (!isCurrent()) return null
+
+        if (!versionsEqual(version, fileVersion(file))) {
+          if (attempt < MAX_METADATA_RETRIES) continue
+          return {
+            kind: "error",
+            message: "This document changed while opening. Click Retry to try again.",
+            retryable: true,
+            version: fileVersion(file),
+          }
+        }
+
+        if (!authorized) return { kind: "locked", version }
+        if (authorized.encrypted && !plugin.canReveal(authorized.version)) {
+          return { kind: "locked", version: authorized.version }
+        }
+
+        const rendered = await DocxFileView.renderPreview(plugin, authorized.buffer)
+        if (!isCurrent()) {
+          rendered.dispose()
+          return null
+        }
+
+        if (!versionsEqual(version, fileVersion(file))) {
+          rendered.dispose()
+          if (attempt < MAX_METADATA_RETRIES) continue
+          return {
+            kind: "error",
+            message: "This document changed while opening. Click Retry to try again.",
+            retryable: true,
+            version: fileVersion(file),
+          }
+        }
+
+        if (authorized.encrypted && !plugin.canReveal(authorized.version)) {
+          rendered.dispose()
+          return { kind: "locked", version: authorized.version }
+        }
+
+        return {
+          kind: "preview",
+          el: rendered.el,
+          dispose: rendered.dispose,
+          encrypted: authorized.encrypted,
+          version: authorized.version,
+        }
       }
 
-      return await DocxFileView.renderPreview(plugin, fileBuffer)
+      return {
+        kind: "error",
+        message: "This document changed while opening. Click Retry to try again.",
+        retryable: true,
+        version: fileVersion(file),
+      }
     } catch (error) {
-      const view = document.createElement("div")
-      view.className = "docxer-error"
-      view.innerText = error instanceof Error ? error.message : "Failed to open this document."
-      return view
+      if (!isCurrent()) return null
+      return {
+        kind: "error",
+        message: error instanceof Error ? error.message : "Failed to open this document.",
+        retryable: true,
+        version: fileVersion(file),
+      }
     }
   }
 
-  private static async renderPreview(plugin: DocxerPlugin, fileBuffer: ArrayBuffer): Promise<HTMLElement> {
+  private static async renderPreview(plugin: DocxerPlugin, fileBuffer: ArrayBuffer): Promise<RenderedPreview> {
     const view = document.createElement("div")
 
     await renderAsync(fileBuffer, view, view, {
@@ -48,28 +134,48 @@ export default class DocxFileView extends ConvertibleFileView {
     })
 
     const docxWrapper = view.querySelector(".docx-wrapper") as HTMLElement | null
-    if (!docxWrapper) return view
+    if (!docxWrapper) return { el: view, dispose: () => {} }
 
     const docx = docxWrapper.querySelector(".docx") as HTMLElement | null
-    if (!docx) return view
+    if (!docx) return { el: view, dispose: () => {} }
 
-    new ResizeObserver(() => {
+    const updateScale = () => {
+      if (view.clientWidth <= 0 || docx.clientWidth <= 0) return
       const scale = Math.min(1, view.clientWidth / docx.clientWidth)
+      if (!Number.isFinite(scale) || scale <= 0) return
       docxWrapper.style.transform = `scale(${scale})`
-    }).observe(view)
+    }
 
-    return view
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(updateScale)
+      observer.observe(view)
+    }
+
+    return {
+      el: view,
+      dispose: () => {
+        observer?.disconnect()
+        observer = null
+      },
+    }
   }
 
-  async getFilePreview(): Promise<HTMLElement | null> {
-    return DocxFileView.getFilePreview(this.plugin, this.file)
+  async getFilePreview(file: TFile, token: LoadToken): Promise<AuthorizedPreview | null> {
+    this.lockSurface("Opening document…")
+    return DocxFileView.getAuthorizedPreview(this.plugin, file, {
+      promptForPassword: true,
+      isCurrent: () => this.isCurrent(token, file),
+      onEncrypted: () => {
+        if (this.isCurrent(token, file)) {
+          this.lockSurface(`"${file.basename}" is password protected.`)
+        }
+      },
+    })
   }
 
-  async getMarkdownContent(attachmentsDirectory: string): Promise<string | null> {
-    if (!this.file) return null
-
-    // Convert DOCX to HTML
-    const fileBuffer = await readDocxBuffer(this.plugin, this.file, { prompt: true })
+  async getMarkdownContent(file: TFile, attachmentsDirectory: string): Promise<string | null> {
+    const fileBuffer = await readDocxBuffer(this.plugin, file, { prompt: true })
     if (!fileBuffer) return null
     const embedImageData = this.plugin.settings.getSetting("embedImageData")
     const ignoreAttachments = this.plugin.settings.getSetting("ignoreAttachments")
@@ -101,7 +207,6 @@ export default class DocxFileView extends ConvertibleFileView {
       // IGNORE state: Completely skip images
       conversionOptions.convertImage = mammoth.images.imgElement(async (image: any) => {
         const altText = image.altText || "image"
-        console.debug(`Ignoring image: ${altText}`)
         // Return just the alt text as a placeholder - no image element
         return { src: "", alt: `[Image: ${altText}]` }
       })
@@ -111,17 +216,15 @@ export default class DocxFileView extends ConvertibleFileView {
     } else {
       // DEFAULT state: Extract to files
       conversionOptions.convertImage = mammoth.images.imgElement(async (image: any) => {
-        console.debug(`Extracting image ${image.altText ?? ""}`)
         const imageBinary = await image.read()
 
         const fallbackFilename = this.plugin.settings.getSetting("fallbackAttachmentName")
-        let attachmentFilename = this.file?.name.replace(/\.docx$/, "") ?? ""
+        let attachmentFilename = file.name.replace(/\.docx$/, "")
         if (this.plugin.settings.getSetting("useImageAltAsFilename"))
           attachmentFilename = image.altText?.replace(/\n/g, " ") ?? ""
         const fileExtension = MimeUtils.EXTENSIONS[image.contentType] ?? "png"
 
         const path = await FileUtils.createBinary(this.app, attachmentsDirectory, attachmentFilename, fallbackFilename, fileExtension, imageBinary)
-        console.debug(`Extracted image to ${path}`)
 
         return { src: path.contains(" ") ? `<${path}>` : path, alt: attachmentFilename }
       })
@@ -162,7 +265,6 @@ export default class DocxFileView extends ConvertibleFileView {
 
           // Fallback if link text is empty - try using the href target ID directly
           const href = node.getAttribute('href') || ''
-          console.warn(`Internal link with href "${href}" has no text content. Creating link to target ID.`)
           return `[[${href}]]` // Link to the raw href target (e.g., [[#_Toc12345]])
         }
       })
@@ -170,7 +272,6 @@ export default class DocxFileView extends ConvertibleFileView {
       turndownService.addRule('comments-description-list', {
         filter: ['dl'],
         replacement: function (content) {
-          console.log(content)
           /*
           Comment [MS1]
 
