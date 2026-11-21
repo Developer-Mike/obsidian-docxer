@@ -1,7 +1,6 @@
 import DocxerPlugin from "src/main"
 import ConvertibleFileView from "./convertible-file-view"
 import { Component, TFile, WorkspaceLeaf } from "obsidian"
-import { debugAuth } from "src/utils/auth-debug"
 import type { AuthorizedPreview } from "./convertible-file-view"
 
 type PreviewProviderClass = {
@@ -76,6 +75,7 @@ export default class DocxerEmbedComponent extends Component {
   }
 
   async loadFile() {
+    // Embeds never auto-prompt so opening a note with protected embeds does not stack password modals.
     await this.runLoad(this.file, false)
   }
 
@@ -86,7 +86,6 @@ export default class DocxerEmbedComponent extends Component {
     const expectedPath = file.path
     this.ensureSurface()
     this.lockSurface(promptForPassword ? `"${file.basename}" is password protected.` : "Opening document…")
-    debugAuth("embed-load", { path: file.path, sessionEpoch: epoch, generation })
 
     const previewClass = this.view as unknown as PreviewProviderClass
     try {
@@ -112,7 +111,6 @@ export default class DocxerEmbedComponent extends Component {
   ) {
     if (!this.isCurrent(generation, epoch, file, expectedPath)) {
       if (result?.kind === "preview") result.dispose()
-      debugAuth("embed-attach-skipped-stale", { path: file.path, sessionEpoch: this.plugin.sessionEpoch, generation: this.loadGeneration, requestedGeneration: generation })
       return
     }
 
@@ -134,7 +132,6 @@ export default class DocxerEmbedComponent extends Component {
 
     if (result.encrypted && !this.plugin.canReveal(result.version)) {
       result.dispose()
-      debugAuth("embed-attach-skipped-unauthorized", { path: file.path, sessionEpoch: this.plugin.sessionEpoch, generation })
       this.showActionCover(file, `"${file.basename}" is password protected.`, "Unlock", true)
       return
     }
@@ -155,13 +152,6 @@ export default class DocxerEmbedComponent extends Component {
     previewHost.appendChild(result.el)
     this.previewDispose = result.dispose
     this.info.containerEl.removeClass("is-locked")
-    debugAuth("embed-attach", {
-      path: file.path,
-      sessionEpoch: epoch,
-      generation,
-      encrypted: result.encrypted,
-      authorized: !result.encrypted || this.plugin.canReveal(result.version),
-    })
   }
 
   private showActionCover(
@@ -206,8 +196,8 @@ export default class DocxerEmbedComponent extends Component {
       text.innerText = message
       coverEl.appendChild(text)
       this.info.containerEl.addClass("is-locked")
-    } catch (error) {
-      debugAuth("embed-lock-skipped", { reason: String(error) })
+    } catch {
+      // Ignore if container is already detached.
     }
   }
 

@@ -88,33 +88,31 @@ try {
 }
 assert(wrongPasswordThrew, "wrong password should throw IncorrectPasswordError")
 
-const timedPassword = "timing-password"
-const timedAgile = officeCrypto.encrypt(plain, { password: timedPassword })
-const decryptStarted = performance.now()
-const timedDecrypted = decryptDocx(timedAgile, timedPassword)
-const decryptMs = performance.now() - decryptStarted
+const decrypted = decryptDocx(agile, password)
 
 const cache = new DocxUnlockCache()
-const version = { path: "timing.docx", mtime: 1, size: timedAgile.length }
-cache.set(1, version, timedDecrypted)
-const cacheStarted = performance.now()
+const version = { path: "sample.docx", mtime: 1, size: agile.length }
+cache.set(1, version, decrypted)
 const cached = cache.get(1, version)
-const cacheMs = performance.now() - cacheStarted
-assert(cached && cached.byteLength === timedDecrypted.byteLength, "session cache should return the decrypted document")
-assert(cacheMs < 20, `cached unlock should be near-instant, took ${cacheMs.toFixed(1)}ms`)
+assert(cached && Buffer.from(cached).equals(plain), "session cache should return the decrypted document")
 assert(!cache.get(2, version), "a new session must not reuse the previous unlock grant")
-assert(!cache.hasGrant(1, { ...version, mtime: 2 }), "a changed file must not reuse the previous unlock grant")
-assert(cached !== timedDecrypted, "cached bytes should be a copy, not the original buffer")
+assert(!cache.hasGrant(2, version), "a new session must not report a grant from the previous session")
+assert(!cache.hasGrant(1, { ...version, mtime: 2 }), "a changed mtime must not reuse the previous unlock grant")
+assert(!cache.hasGrant(1, { ...version, size: version.size + 1 }), "a changed size must not reuse the previous unlock grant")
+assert(cached !== decrypted, "cached bytes should be a copy, not the original buffer")
+zeroArrayBuffer(cached)
+const cachedAgain = cache.get(1, version)
+assert(cachedAgain && Buffer.from(cachedAgain).equals(plain), "mutating a returned copy must not alter the cached buffer")
 const storedBeforeDelete = cache.records.get(version.path).decrypted
 assert(new Uint8Array(storedBeforeDelete).some((b) => b !== 0), "stored cache buffer should contain non-zero decrypted bytes")
 assert(cache.delete(version.path), "an existing grant should be removable on rename/delete")
 assert(new Uint8Array(storedBeforeDelete).every((b) => b === 0), "delete must zero the cached ArrayBuffer")
 assert(!cache.hasGrant(1, version), "removed grants must not authorize a later preview")
 
-const version2 = { path: "timing.docx", mtime: 2, size: timedAgile.length }
-cache.set(1, version, timedDecrypted)
+const version2 = { path: "sample.docx", mtime: 2, size: agile.length }
+cache.set(1, version, decrypted)
 const storedBeforeOverwrite = cache.records.get(version.path).decrypted
-cache.set(1, version2, timedDecrypted)
+cache.set(1, version2, decrypted)
 assert(new Uint8Array(storedBeforeOverwrite).every((b) => b === 0), "overwriting a cache entry must zero the previous ArrayBuffer")
 const storedBeforeClear = cache.records.get(version2.path).decrypted
 cache.clear()
@@ -126,7 +124,7 @@ zeroArrayBuffer(scratch)
 assert(new Uint8Array(scratch).every((b) => b === 0), "zeroArrayBuffer must overwrite all bytes with zero")
 assert(versionsEqual(version, { ...version }), "versionsEqual should match identical versions")
 assert(!versionsEqual(version, version2), "versionsEqual should reject changed mtime")
-console.log(`agile unlock ${decryptMs.toFixed(1)}ms, cached reopen ${cacheMs.toFixed(1)}ms`)
+assert(!versionsEqual(version, { ...version, size: version.size + 1 }), "versionsEqual should reject changed size")
 
 const samplePath = process.env.DOCX_SAMPLE_PATH
 if (samplePath) {

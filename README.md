@@ -40,7 +40,12 @@ Open the Community Plugins tab in the settings and search for "Docxer" (or click
 2. Open the file in Obsidian.
 3. Click the "Convert" button in the top right corner of the editor to convert the file to markdown.
 
-Password-protected Word files prompt for the password when opened or converted. The password is kept in memory for the current session only and is never written to disk. The original encrypted file in your vault is left unchanged.
+### Password-protected `.docx` files
+- Opening a password-protected file in a tab prompts for its password. Embedded `.docx` files show an **Unlock** cover instead and never auto-prompt.
+- The password is used only for the unlock attempt and is not stored.
+- Decrypted document bytes are cached in memory for the current Obsidian session only. Quitting Obsidian or unloading the plugin clears all unlock grants, cached bytes, and active previews.
+- Previewing leaves the encrypted `.docx` file on disk unchanged.
+- Converting writes ordinary Markdown, follows your configured attachment settings, and deletes the source `.docx` if **Delete source file after conversion** is enabled.
 
 ## Support
 Please consider supporting the plugin. The two easiest ways to support the plugin are either by starring ⭐ the repository or by donating any amount on [Ko-fi](https://ko-fi.com/X8X27IA08) ❤️. Thank you!

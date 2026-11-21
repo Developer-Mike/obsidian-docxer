@@ -2,7 +2,7 @@ import { FileView, Notice, TFile, WorkspaceLeaf } from "obsidian"
 import DocxerPlugin from "src/main"
 import FileUtils from "src/utils/file-utils"
 import { FileVersion } from "src/utils/docx-unlock-cache"
-import { debugAuth } from "src/utils/auth-debug"
+import { isAuthorizedReadCurrent } from "src/utils/protected-docx"
 
 export type LoadToken = {
   generation: number
@@ -23,6 +23,12 @@ export type AuthorizedPreview =
   | { kind: "locked", version: FileVersion, message?: string }
   | { kind: "error", message: string, retryable?: boolean, version: FileVersion }
 
+export type MarkdownConversionResult =
+  | { status: "ok", markdown: string, version: FileVersion, sessionEpoch: number, encrypted: boolean }
+  | { status: "locked" }
+  | { status: "stale" }
+
+// Extend FileView rather than EditableFileView: previews are read-only and own their DOM/cover lifecycle.
 export default abstract class ConvertibleFileView extends FileView {
   plugin: DocxerPlugin
   header: HTMLElement | null = null
@@ -117,11 +123,9 @@ export default abstract class ConvertibleFileView extends FileView {
 	}
 
   abstract getFilePreview(file: TFile, token: LoadToken): Promise<AuthorizedPreview | null>
-
 	async onLoadFile(file: TFile) {
     const token = this.beginLoad(file)
     this.lockSurface("Opening document…")
-    debugAuth("view-load", { path: file.path, sessionEpoch: token.sessionEpoch, generation: token.generation })
 		await super.onLoadFile(file)
     if (!this.isCurrent(token, file)) return
 
@@ -196,6 +200,7 @@ export default abstract class ConvertibleFileView extends FileView {
     }
   }
 
+  // Keeps previewHost empty and hidden behind coverEl whenever locked, changing, or shutting down.
   lockSurface(message: string, isError = false) {
     this.disposeActivePreview()
     if (!this.isSurfaceLive()) return
@@ -212,25 +217,19 @@ export default abstract class ConvertibleFileView extends FileView {
       text.innerText = message
       coverEl.appendChild(text)
       this.contentEl.addClass("is-locked")
-    } catch (error) {
-      debugAuth("lock-surface-skipped", { reason: String(error) })
+    } catch {
+      // Ignore if the view DOM is already detached.
     }
   }
 
+  // Previews render detached and only attach after re-checking generation, sessionEpoch, and grant.
   revealPreview(token: LoadToken, file: TFile, preview: PreviewCommit) {
     if (!this.isCurrent(token, file)) {
       preview.dispose()
-      debugAuth("view-attach-skipped-stale", {
-        path: file.path,
-        sessionEpoch: this.plugin.sessionEpoch,
-        generation: this.loadGeneration,
-        requestedGeneration: token.generation,
-      })
       return
     }
     if (preview.encrypted && !this.plugin.canReveal(preview.version)) {
       preview.dispose()
-      debugAuth("view-attach-skipped-unauthorized", { path: file.path, sessionEpoch: token.sessionEpoch, generation: token.generation })
       this.showUnlockAction(file)
       return
     }
@@ -250,13 +249,6 @@ export default abstract class ConvertibleFileView extends FileView {
     this.content = preview.el
     this.previewDispose = preview.dispose
     this.contentEl.removeClass("is-locked")
-    debugAuth("view-attach", {
-      path: file.path,
-      sessionEpoch: token.sessionEpoch,
-      generation: token.generation,
-      encrypted: preview.encrypted,
-      authorized: !preview.encrypted || this.plugin.canReveal(preview.version),
-    })
   }
 
   protected showUnlockAction(file: TFile, message?: string) {
@@ -338,7 +330,7 @@ export default abstract class ConvertibleFileView extends FileView {
 		await super.onUnloadFile(file)
 	}
 
-  abstract getMarkdownContent(file: TFile, attachmentsDirectory: string): Promise<string | null>
+  abstract getMarkdownContent(file: TFile, attachmentsDirectory: string): Promise<MarkdownConversionResult>
   private async convertFile() {
     const file = this.file
     if (!file) return
@@ -356,16 +348,42 @@ export default abstract class ConvertibleFileView extends FileView {
       "subfolder": FileUtils.joinPath(FileUtils.dirname(file.path), this.plugin.settings.getSetting("customAttachmentsFolder"))
     }[this.plugin.settings.getSetting("attachmentsFolder")]
 
-    const markdown = await this.getMarkdownContent(file, attachmentsDirectory)
-    if (!markdown) {
+    const result = await this.getMarkdownContent(file, attachmentsDirectory)
+    if (result.status === "stale") {
+      new Notice("Conversion cancelled because the source document changed.")
+      return
+    }
+    if (result.status === "locked") {
       new Notice("Could not convert this file. If it is password protected, unlock it and try again.")
       return
     }
 
-    const convertedFile = await this.app.vault.create(convertedFilePath, markdown)
-    this.leaf.openFile(convertedFile)
+    // Re-check file version and sessionEpoch before writing or deleting so a concurrent edit cannot be clobbered.
+    if (!isAuthorizedReadCurrent(this.plugin, file, result.version, result.sessionEpoch, result.encrypted)) {
+      new Notice("Conversion cancelled because the source document changed.")
+      return
+    }
+    if (this.app.vault.getAbstractFileByPath(convertedFilePath)) {
+      new Notice("A file with the same name already exists.")
+      return
+    }
 
-    if (this.plugin.settings.getSetting("deleteFileAfterConversion"))
-      this.app.vault.delete(file)
+    const convertedFile = await this.app.vault.create(convertedFilePath, result.markdown)
+
+    if (!this.unloaded
+      && this.leaf.view === this
+      && this.file === file
+      && this.file.path === result.version.path
+      && this.plugin.sessionEpoch === result.sessionEpoch) {
+      await this.leaf.openFile(convertedFile)
+    }
+
+    if (this.plugin.settings.getSetting("deleteFileAfterConversion")) {
+      if (!isAuthorizedReadCurrent(this.plugin, file, result.version, result.sessionEpoch, result.encrypted)) {
+        new Notice("The source document changed during conversion, so it was not deleted.")
+        return
+      }
+      await this.app.vault.delete(file)
+    }
   }
 }

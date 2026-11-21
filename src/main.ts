@@ -5,7 +5,6 @@ import SettingsManager from "./settings"
 import DocxUnlockCache, { FileVersion, zeroArrayBuffer } from "./utils/docx-unlock-cache"
 import { decryptDocx, IncorrectPasswordError, isEncryptedDocx, UnsupportedEncryptionError } from "./utils/docx-encryption"
 import { promptForDocxPassword } from "./ui/password-modal"
-import { debugAuth } from "./utils/auth-debug"
 import { Plugin, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian"
 
 export const FILETYPE_MAP: { [key: string]: new(leaf: WorkspaceLeaf, plugin: DocxerPlugin) => ConvertibleFileView } = {
@@ -27,7 +26,9 @@ type InflightUnlock = {
 
 export default class DocxerPlugin extends Plugin {
   settings: SettingsManager
+  // sessionEpoch invalidates all grants, caches, and in-flight opens on quit/unload.
   sessionEpoch = 0
+  // Session-scoped decrypted byte copies keyed by path + mtime/size (passwords are never cached).
   unlockCache = new DocxUnlockCache()
   private sessionEnded = false
   private inflightUnlocks = new Map<string, InflightUnlock>()
@@ -54,13 +55,11 @@ export default class DocxerPlugin extends Plugin {
   beginSession() {
     this.sessionEnded = false
     this.resetSessionState()
-    debugAuth("session-begin", { sessionEpoch: this.sessionEpoch })
   }
 
   endSession() {
     if (this.sessionEnded) return
     this.sessionEnded = true
-    debugAuth("session-end", { sessionEpoch: this.sessionEpoch })
     this.resetSessionState()
 
     const views = new Set<ConvertibleFileView>(this.surfaces)
@@ -70,22 +69,22 @@ export default class DocxerPlugin extends Plugin {
           views.add(leaf.view)
         }
       })
-    } catch (error) {
-      debugAuth("leaf-iterate-skipped", { reason: String(error) })
+    } catch {
+      // Workspace may already be tearing down during quit.
     }
 
     for (const view of views) {
       try {
         view.invalidate("This document is password protected.")
-      } catch (error) {
-        debugAuth("surface-lock-skipped", { reason: String(error) })
+      } catch {
+        // View may already be detached during shutdown.
       }
     }
     for (const embed of [...this.embeds]) {
       try {
         embed.invalidate("This document is password protected.")
-      } catch (error) {
-        debugAuth("embed-lock-skipped", { reason: String(error) })
+      } catch {
+        // Embed container may already be detached during shutdown.
       }
     }
   }
@@ -126,17 +125,14 @@ export default class DocxerPlugin extends Plugin {
     options: { prompt?: boolean },
   ): Promise<AuthorizedDocument | null> {
     if (!isEncryptedDocx(raw)) {
-      debugAuth("document-unencrypted", { path: version.path, sessionEpoch: this.sessionEpoch })
       return { version, encrypted: false, buffer: raw }
     }
 
     const cached = this.unlockCache.get(this.sessionEpoch, version)
     if (cached) {
-      debugAuth("cache-hit", { path: version.path, sessionEpoch: this.sessionEpoch, mtime: version.mtime, size: version.size })
       return { version, encrypted: true, buffer: cached }
     }
 
-    debugAuth("cache-miss", { path: version.path, sessionEpoch: this.sessionEpoch, mtime: version.mtime, size: version.size, prompt: options.prompt ?? true })
     if (this.sessionEnded || !(options.prompt ?? true)) return null
 
     const unlocked = await this.unlockEncryptedDocx(file, raw, version)
@@ -193,7 +189,6 @@ export default class DocxerPlugin extends Plugin {
           }
           this.unlockCache.set(epoch, version, decrypted)
           unlocked = true
-          debugAuth("unlock-grant", { path: version.path, sessionEpoch: epoch, mtime: version.mtime, size: version.size })
           return { status: "ok" }
         } finally {
           zeroArrayBuffer(decrypted)
@@ -222,12 +217,10 @@ export default class DocxerPlugin extends Plugin {
     return unlocked
   }
 
-  private revokeInflightForPaths(paths: Set<string>): boolean {
-    let revoked = false
+  private revokeInflightForPaths(paths: Set<string>) {
     for (const [key, entry] of [...this.inflightUnlocks.entries()]) {
       if (!paths.has(entry.path)) continue
       this.inflightUnlocks.delete(key)
-      revoked = true
       const cancel = entry.cancel
       entry.cancel = null
       if (cancel) {
@@ -239,48 +232,31 @@ export default class DocxerPlugin extends Plugin {
         }
       }
     }
-    return revoked
   }
 
   private forgetFile(oldPath: string, newPath?: string, reason: "modify" | "delete" | "rename" = "modify") {
     const paths = new Set<string>([oldPath])
     if (newPath) paths.add(newPath)
 
-    let hadGrant = false
     for (const path of paths) {
-      if (this.unlockCache.delete(path)) hadGrant = true
+      this.unlockCache.delete(path)
     }
 
-    const revokedInflight = this.revokeInflightForPaths(paths)
+    this.revokeInflightForPaths(paths)
     const message = reason === "delete"
       ? "This file is no longer available."
       : "This document changed and must be reopened."
     const allowReopen = reason !== "delete"
 
-    let invalidatedSurface = false
     for (const view of [...this.surfaces]) {
       if (view.file && paths.has(view.file.path)) {
-        invalidatedSurface = true
         view.invalidate(message, allowReopen ? { actionLabel: "Reopen" } : {})
       }
     }
     for (const embed of [...this.embeds]) {
       if (paths.has(embed.file.path)) {
-        invalidatedSurface = true
         embed.invalidate(message, allowReopen ? { offerUnlock: true, actionLabel: "Reopen" } : {})
       }
-    }
-
-    if (hadGrant || revokedInflight || invalidatedSurface) {
-      debugAuth("file-invalidated", {
-        oldPath,
-        newPath: newPath ?? oldPath,
-        reason,
-        hadGrant,
-        revokedInflight,
-        invalidatedSurface,
-        sessionEpoch: this.sessionEpoch,
-      })
     }
   }
 
